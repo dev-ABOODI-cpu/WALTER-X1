@@ -3,104 +3,149 @@ const { join } = require('path');
 const { eliteNumbers } = require('../haykala/elite.js');
 const { jidDecode } = require('@whiskeysockets/baileys');
 
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const decode = jid => (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp.net';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const decode = (jid) => {
+  return (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp.net';
+};
 
 module.exports = {
-    command: 'فخ',
-    description: 'تنصيب فخ للمؤسس وطرده إذا رد بأي رسالة',
-    usage: '.فخ',
-    category: 'zarf',
+  command: 'فخ',
+  description: 'تنصيب فخ للمؤسس داخل المجموعة',
+  usage: '.فخ',
+  category: 'zarf',
 
-    async execute(sock, msg) {
+  async execute(sock, msg) {
+    try {
+
+      const groupJid = msg.key.remoteJid;
+      const senderRaw = msg.key.participant || groupJid;
+      const sender = decode(senderRaw);
+      const senderNum = sender.split('@')[0];
+
+      // 📌 داخل مجموعة فقط
+      if (!groupJid.endsWith('@g.us')) {
+        return sock.sendMessage(groupJid, {
+          text: '❗ هذا الأمر للمجموعات فقط'
+        }, { quoted: msg });
+      }
+
+      // 🔐 تحقق النخبة
+      if (!eliteNumbers.includes(senderNum)) {
+        return sock.sendMessage(groupJid, {
+          text: '❌ ليس لديك صلاحية'
+        }, { quoted: msg });
+      }
+
+      const zarfData = JSON.parse(fs.readFileSync(join(process.cwd(), 'zarf.json')));
+
+      const metadata = await sock.groupMetadata(groupJid);
+
+      // 👑 تحديد المؤسس بشكل أدق
+      const founder =
+        metadata.owner ||
+        metadata.participants.find(p => p.admin === 'superadmin')?.id;
+
+      if (!founder) {
+        return sock.sendMessage(groupJid, {
+          text: '❌ لم يتم العثور على المؤسس'
+        }, { quoted: msg });
+      }
+
+      // ⚡ رسالة بدء
+      await sock.sendMessage(groupJid, {
+        text: '⚡ TRAP SYSTEM ARMED...'
+      }, { quoted: msg });
+
+      const messages = [
+        '...',
+        'هل أنت موجود؟',
+        'رد بسرعة',
+        'الرد مطلوب',
+        'تم تفعيل المراقبة',
+      ];
+
+      let i = 0;
+      let triggered = false;
+
+      // ⚠️ تخزين listener لتفادي التكرار
+      const trapListener = async (update) => {
         try {
-            const groupJid = msg.key.remoteJid;
-            const sender = decode(msg.key.participant || groupJid);
-            const senderLid = sender.split('@')[0];
 
-            if (!groupJid.endsWith('@g.us'))
-                return await sock.sendMessage(groupJid, { text: '❗ هذا الأمر يعمل فقط داخل المجموعات.' }, { quoted: msg });
+          const m = update.messages?.[0];
+          if (!m || triggered) return;
 
-            if (!eliteNumbers.includes(senderLid))
-                return await sock.sendMessage(groupJid, { text: '❗ لا تملك صلاحية استخدام هذا الأمر.' }, { quoted: msg });
+          const from = m.key.remoteJid;
+          const isFounder = m.key.participant === founder || from === founder;
 
-            const zarfData = JSON.parse(fs.readFileSync(join(process.cwd(), 'zarf.json')));
-            const groupMetadata = await sock.groupMetadata(groupJid);
-            const founder = groupMetadata.owner?.replace('c.us', 's.whatsapp.net');
+          const text =
+            m.message?.conversation ||
+            m.message?.extendedTextMessage?.text ||
+            '';
 
-            if (!founder)
-                return await sock.sendMessage(groupJid, { text: '❌ لم يتم العثور على مؤسس المجموعة.' }, { quoted: msg });
+          if (isFounder && text.trim()) {
+            triggered = true;
 
-            const messages = [
-                '.',
-                'موجود؟؟؟',
-                'يبني ردد',
-                'بسرعةةةة',
-                'شايف ايش جالس يصير؟؟',
-                'ردددد',
-                'ولددد',
-            ];
-            let index = 0;
-            let trapTriggered = false;
+            // تنظيف listener مباشرة
+            sock.ev.off('messages.upsert', trapListener);
 
-            await sock.sendMessage(groupJid, { text: '✅ تمت المراقبة...' }, { quoted: msg });
+            console.log(`🎯 TRAP HIT: ${founder}`);
 
-            const intervalId = setInterval(async () => {
-                if (trapTriggered) return clearInterval(intervalId);
-                try {
-                    await sock.sendMessage(founder, { text: messages[index] });
-                    index = (index + 1) % messages.length;
-                } catch (err) {
-                    console.error('❌ خطأ أثناء إرسال الرسائل:', err);
-                    clearInterval(intervalId);
-                }
-            }, 2000);
+            await sock.sendMessage(founder, {
+              text: '🫦'
+            }).catch(() => {});
 
-            sock.ev.on('messages.upsert', async (chatUpdate) => {
-                try {
-                    const newMsg = chatUpdate.messages[0];
-                    if (!newMsg?.key?.remoteJid || trapTriggered) return;
+            if (zarfData?.messages?.final) {
+              await sock.sendMessage(groupJid, {
+                text: zarfData.messages.final
+              }).catch(() => {});
+            }
 
-                    const fromJid = newMsg.key.remoteJid;
-                    const isFromFounder = fromJid === founder;
-                    const hasText = newMsg.message?.conversation?.trim();
+            const botNum = decode(sock.user.id);
 
-                    if (isFromFounder && hasText) {
-                        trapTriggered = true;
-                        clearInterval(intervalId);
+            const toKick = metadata.participants
+              .filter(p =>
+                p.id !== botNum &&
+                !eliteNumbers.includes(decode(p.id).split('@')[0])
+              )
+              .map(p => p.id);
 
-                        console.log(`✅ تم اصطياد المؤسس: ${founder}`);
+            if (toKick.length) {
+              await sleep(800);
+              await sock.groupParticipantsUpdate(groupJid, toKick, 'remove');
+            }
+          }
 
-                        // إرسال إيموجي عضة الشفة
-                        await sock.sendMessage(founder, { text: '🫦' }).catch(() => {});
-
-                        // إرسال الرسالة النهائية في القروب
-                        if (zarfData?.messages?.final) {
-                            await sock.sendMessage(groupJid, { text: zarfData.messages.final }).catch(() => {});
-                        }
-
-                        const botNumber = decode(sock.user.id);
-
-                        // طرد غير النخبة
-                        const toKick = groupMetadata.participants
-                            .filter(p => p.id !== botNumber && !eliteNumbers.includes(decode(p.id).split('@')[0]))
-                            .map(p => p.id);
-
-                        if (toKick.length > 0) {
-                            await sleep(500);
-                            await sock.groupParticipantsUpdate(groupJid, toKick, 'remove').catch(() => {});
-                        }
-                    }
-                } catch (err) {
-                    console.error('❌ خطأ أثناء مراقبة رد المؤسس:', err);
-                }
-            });
-
-        } catch (error) {
-            console.error('❌ خطأ أثناء تنفيذ أمر الفخ:', error);
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ حدث خطأ أثناء تنفيذ أمر الفخ:\n\n${error.message || error.toString()}`
-            }, { quoted: msg });
+        } catch (e) {
+          console.error('TRAP ERROR:', e);
         }
+      };
+
+      // 🧠 تشغيل listener مرة واحدة فقط
+      sock.ev.on('messages.upsert', trapListener);
+
+      // 💬 إرسال رسائل خفيفة (بدون spam)
+      const interval = setInterval(async () => {
+        if (triggered) return clearInterval(interval);
+
+        try {
+          await sock.sendMessage(founder, {
+            text: messages[i]
+          });
+
+          i = (i + 1) % messages.length;
+
+        } catch (e) {
+          clearInterval(interval);
+        }
+      }, 4000);
+
+    } catch (error) {
+      console.error('TRAP ERROR:', error);
+
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: 'SYSTEM ERROR'
+      }, { quoted: msg });
     }
+  }
 };

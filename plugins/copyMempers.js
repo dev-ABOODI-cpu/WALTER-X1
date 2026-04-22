@@ -1,73 +1,115 @@
 const { jidDecode } = require('@whiskeysockets/baileys');
 const { isElite } = require('../haykala/elite.js');
 
-const decode = jid => (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp.net';
+const decode = jid =>
+  (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp.net';
 
 module.exports = {
-    command: 'نسخ',
-    description: 'نسخ احتياطي لجهات اتصال أعضاء المجموعة.',
-    usage: '.نسخ',
-    
-    async execute(sock, msg) {
-        const groupJid = msg.key.remoteJid;
-        const sender = decode(msg.key.participant || groupJid);
-        const senderLid = sender.split('@')[0];
+  command: 'نسخ',
+  description: 'نسخ جهات اتصال أعضاء المجموعة',
+  usage: '.نسخ',
 
-        if (!groupJid.endsWith('@g.us')) {
-            return sock.sendMessage(groupJid, { text: '❌ هذا الأمر يعمل فقط داخل المجموعات.' }, { quoted: msg });
-        }
+  async execute(sock, msg) {
+    try {
 
-        if (!isElite(senderLid)) {
-            return sock.sendMessage(groupJid, { text: '❌ ليس لديك صلاحية لاستخدام هذا الأمر.' }, { quoted: msg });
-        }
+      const groupJid = msg.key.remoteJid;
+      const sender = decode(msg.key.participant || groupJid);
+      const senderNum = sender.split('@')[0];
 
-        const metadata = await sock.groupMetadata(groupJid);
-        const groupName = metadata.subject || 'مجموعة';
+      // 📌 داخل مجموعة فقط
+      if (!groupJid.endsWith('@g.us')) {
+        return sock.sendMessage(groupJid, {
+          text: '❌ هذا الأمر للمجموعات فقط'
+        }, { quoted: msg });
+      }
 
-        const words = groupName.split(/\s+/).filter(word => !/[\u{1F300}-\u{1FAD6}]/u.test(word));
-        const firstWord = words.length > 0 ? words[0] : "مجموعة";
-        const emojis = groupName.match(/[\u{1F300}-\u{1FAD6}]/gu) || [];
-        const selectedEmoji = emojis.length === 3 ? emojis[1] : emojis[0] || "";
+      // 🔐 نخبة فقط
+      if (!isElite(senderNum)) {
+        return sock.sendMessage(groupJid, {
+          text: '❌ ليس لديك صلاحية'
+        }, { quoted: msg });
+      }
 
-        const participants = metadata.participants;
-        if (!participants || participants.length === 0) {
-            return sock.sendMessage(groupJid, { text: '❌ لا يوجد أعضاء في المجموعة.' }, { quoted: msg });
-        }
+      const meta = await sock.groupMetadata(groupJid);
 
-        let contacts = [];
-        let index = 1;
+      const groupName = meta.subject || 'GROUP';
 
-        for (const participant of participants) {
-            const jid = participant.id;
-            const phone = jid.split('@')[0];
-            const intl = `+${phone}`;
-            const displayName = `${firstWord} ${selectedEmoji} ${index}`.trim();
+      // 🧠 استخراج اسم نظيف
+      const cleanName = groupName
+        .replace(/[^\w\u0600-\u06FF\s]/g, '')
+        .split(' ')[0] || 'Group';
 
-            contacts.push({
-                displayName,
-                vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${displayName}\nTEL;TYPE=CELL;waid=${phone}:${intl}\nEND:VCARD`
-            });
+      const participants = meta.participants || [];
 
-            index++;
+      if (!participants.length) {
+        return sock.sendMessage(groupJid, {
+          text: '❌ لا يوجد أعضاء'
+        }, { quoted: msg });
+      }
 
-            if (contacts.length === 100) {
-                await sock.sendMessage(groupJid, {
-                    contacts: {
-                        displayName: "جهات اتصال المجموعة",
-                        contacts: contacts
-                    }
-                }, { quoted: msg });
-                contacts = [];
+      await sock.sendMessage(groupJid, {
+        text: '⏳ BACKUP STARTING...'
+      }, { quoted: msg });
+
+      let batch = [];
+      let count = 1;
+
+      for (const p of participants) {
+
+        const phone = p.id.split('@')[0];
+
+        const name = `${cleanName}_${count}`;
+
+        batch.push({
+          displayName: name,
+          vcard:
+`BEGIN:VCARD
+VERSION:3.0
+FN:${name}
+TEL;TYPE=CELL;waid=${phone}:+${phone}
+END:VCARD`
+        });
+
+        count++;
+
+        // 📦 إرسال دفعة كل 50
+        if (batch.length === 50) {
+          await sock.sendMessage(groupJid, {
+            contacts: {
+              displayName: 'GROUP BACKUP',
+              contacts: batch
             }
-        }
+          }, { quoted: msg });
 
-        if (contacts.length > 0) {
-            await sock.sendMessage(groupJid, {
-                contacts: {
-                    displayName: "جهات اتصال المجموعة",
-                    contacts: contacts
-                }
-            }, { quoted: msg });
+          batch = [];
+          await new Promise(r => setTimeout(r, 800));
         }
+      }
+
+      // 📦 إرسال الباقي
+      if (batch.length) {
+        await sock.sendMessage(groupJid, {
+          contacts: {
+            displayName: 'GROUP BACKUP',
+            contacts: batch
+          }
+        }, { quoted: msg });
+      }
+
+      // 💀 نهاية العملية
+      await sock.sendMessage(groupJid, {
+        text: `╔══════════════╗
+║ BACKUP DONE  ║
+║ ${participants.length} USERS ║
+╚══════════════╝`
+      }, { quoted: msg });
+
+    } catch (err) {
+      console.error(err);
+
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: 'SYSTEM ERROR'
+      }, { quoted: msg });
     }
+  }
 };

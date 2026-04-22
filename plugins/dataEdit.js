@@ -10,7 +10,7 @@ const audioPath = join(process.cwd(), 'sounds', 'AUDIO.mp3');
 module.exports = {
     command: 'edit',
     description: 'تعديل إعدادات الزرف عبر الرد على الرسالة',
-    category: 'tools',
+    category: 'SYSTEM',
     usage: '.edit [اسم|وصف|منشن|رسالة|رياكت|صورة|صوت] [شغل|طفي]',
 
     async execute(sock, msg) {

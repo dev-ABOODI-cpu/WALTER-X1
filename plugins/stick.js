@@ -5,67 +5,80 @@ const path = require('path');
 
 module.exports = {
   command: 'ملصق',
+
   async execute(sock, m) {
+    const chatId = m.key.remoteJid;
+
     try {
       const contextInfo = m.message?.extendedTextMessage?.contextInfo;
-      
-      if (!contextInfo || !contextInfo.quotedMessage || !contextInfo.quotedMessage.imageMessage) {
-        return await sock.sendMessage(m.key.remoteJid, { 
-          text: '⚠️ يرجى الرد على صورة لتحويلها إلى ستيكر.' 
+
+      if (!contextInfo?.quotedMessage?.imageMessage) {
+        return sock.sendMessage(chatId, {
+          text: '⚠️ لازم ترد على صورة عشان تتحول لملصق.'
         }, { quoted: m });
       }
 
       const quotedMsg = contextInfo.quotedMessage.imageMessage;
+
       const stream = await downloadContentFromMessage(quotedMsg, 'image');
+
       let buffer = Buffer.from([]);
       for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
       }
 
       if (!buffer.length) {
-        return await sock.sendMessage(m.key.remoteJid, { 
-          text: '⚠️ فشل تحميل الصورة، حاول مجددًا.' 
+        return sock.sendMessage(chatId, {
+          text: '⚠️ فشل تحميل الصورة.'
         }, { quoted: m });
       }
 
-      const inputPath = path.join(process.cwd(), 'temp-input.jpg');
-      const outputPath = path.join(process.cwd(), 'temp-output.webp');
+      // 🔥 ملفات عشوائية عشان ما يحصل تضارب
+      const id = Date.now();
+      const inputPath = path.join(process.cwd(), `temp-${id}.jpg`);
+      const outputPath = path.join(process.cwd(), `temp-${id}.webp`);
 
       fs.writeFileSync(inputPath, buffer);
 
-      exec(`ffmpeg -i ${inputPath} -vf "scale=512:512:force_original_aspect_ratio=decrease" -c:v libwebp -quality 100 -compression_level 6 ${outputPath}`, async (error) => {
+      const cmd = `ffmpeg -y -i "${inputPath}" -vf "scale=512:512:force_original_aspect_ratio=decrease" -c:v libwebp -preset default -qscale 80 "${outputPath}"`;
+
+      exec(cmd, async (error) => {
         if (error) {
-          console.error('FFmpeg error:', error);
-          return await sock.sendMessage(m.key.remoteJid, { 
-            text: '❌ حدث خطأ أثناء تحويل الصورة.' 
+          console.error(error);
+          cleanup();
+          return sock.sendMessage(chatId, {
+            text: '❌ خطأ في تحويل الصورة.'
           }, { quoted: m });
         }
 
         try {
           const webpBuffer = fs.readFileSync(outputPath);
-          await sock.sendMessage(m.key.remoteJid, { 
-            sticker: webpBuffer,
-            stickerName: "SAMURAI - X",
-            stickerAuthor: "DEV - ABOODI"
+
+          await sock.sendMessage(chatId, {
+            sticker: webpBuffer
           }, { quoted: m });
-        } catch (sendError) {
-          console.error('Send error:', sendError);
-          await sock.sendMessage(m.key.remoteJid, { 
-            text: '❌ حدث خطأ أثناء إرسال الملصق.' 
+
+        } catch (e) {
+          console.error(e);
+          sock.sendMessage(chatId, {
+            text: '❌ خطأ أثناء إرسال الملصق.'
           }, { quoted: m });
         }
 
-        try {
-          fs.unlinkSync(inputPath);
-          fs.unlinkSync(outputPath);
-        } catch (cleanupError) {
-          console.error('Cleanup error:', cleanupError);
-        }
+        cleanup();
       });
 
-    } catch (error) {
-      await sock.sendMessage(m.key.remoteJid, { 
-        text: '❌ حدث خطأ أثناء معالجة الصورة، حاول مجددًا.' 
+      function cleanup() {
+        try {
+          if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+          if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        } catch {}
+      }
+
+    } catch (err) {
+      console.error(err);
+      sock.sendMessage(chatId, {
+        text: '❌ حدث خطأ أثناء معالجة الملصق.'
       }, { quoted: m });
     }
   }

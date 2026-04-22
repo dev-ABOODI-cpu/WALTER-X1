@@ -2,7 +2,7 @@ module.exports = {
   command: '.',
   description: 'امر ... تقدر تستخدمه ك اول امر في اي قروب بتزرفه وبيستوعب بدون مايرد عليك',
   usage: '.صمت',
-  category: 'misc',
+  category: 'CONTROL',
 
   async execute(sock, msg) {
     console.log(`تم استلام أمر صمت من: ${msg.key.participant || msg.key.remoteJid}`);

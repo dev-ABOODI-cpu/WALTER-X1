@@ -5,66 +5,97 @@ const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { isElite } = require('../haykala/elite.js');
 
 module.exports = {
-    command: 'icon',
-    description: 'تغيير صورة الجروب، متاح فقط للنخبة.',
-    usage: '.icon (أرسل صورة أو رد على صورة)',
-    
-    async execute(sock, msg) {
+  command: 'icon',
+  description: 'تغيير صورة المجموعة (للنخبة فقط)',
+  usage: '.icon (صورة أو رد على صورة)',
+
+  async execute(sock, msg) {
+    try {
+
+      const chatId = msg.key.remoteJid;
+      const sender = msg.key.participant || msg.key.remoteJid;
+
+      // 🔐 تحقق النخبة
+      if (!isElite(sender)) {
+        return await sock.sendMessage(chatId, {
+          text: `╔══════════════╗
+║ ACCESS DENIED ║
+║ ELITE ONLY    ║
+╚══════════════╝`
+        }, { quoted: msg });
+      }
+
+      // 📩 استخراج الصورة (رسالة أو رد)
+      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+
+      const imageMsg =
+        msg.message?.imageMessage ||
+        quoted?.imageMessage;
+
+      if (!imageMsg) {
+        return await sock.sendMessage(chatId, {
+          text: `╔══════════════╗
+║ NO IMAGE FOUND ║
+╚══════════════╝`
+        }, { quoted: msg });
+      }
+
+      // 📥 تحميل الصورة
+      const buffer = await downloadMediaMessage(
+        { message: quoted || msg.message },
+        'buffer',
+        {}
+      );
+
+      // 📁 مجلد مؤقت آمن
+      const tempDir = path.join(__dirname, '../temp');
+
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      const inputPath = path.join(tempDir, 'icon_input.jpg');
+      const outputPath = path.join(tempDir, 'icon_output.jpg');
+
+      fs.writeFileSync(inputPath, buffer);
+
+      // ⚡ تحويل الصورة (اختياري)
+      exec(`convert ${inputPath} ${outputPath}`, async (err) => {
         try {
-            const chatId = msg.key.remoteJid;
-            const senderId = msg.key.participant || msg.key.remoteJid;
 
-            if (!isElite(senderId)) {
-                return sock.sendMessage(chatId, {
-                    text: '❌ هذا الأمر متاح فقط لأعضاء النخبة!'
-                }, { quoted: msg });
-            }
+          // لو فشل التحويل نستخدم الأصل
+          const finalPath = err ? inputPath : outputPath;
 
-            const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-            const imageMessage = quoted?.imageMessage || msg.message?.imageMessage;
+          await sock.updateProfilePicture(chatId, {
+            url: finalPath
+          });
 
-            if (!imageMessage) {
-                return sock.sendMessage(chatId, {
-                    text: '❌ يرجى إرسال صورة أو الرد على صورة لتغيير صورة المجموعة.'
-                }, { quoted: msg });
-            }
+          // 🧹 تنظيف الملفات
+          if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+          if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
 
-            const buffer = await downloadMediaMessage(
-                { message: { imageMessage } },
-                'buffer',
-                {}
-            );
+          await sock.sendMessage(chatId, {
+            text: `╔══════════════╗
+║ ICON UPDATED ║
+║ SUCCESSFUL   ║
+╚══════════════╝`
+          }, { quoted: msg });
 
-            const tempDir = '/sdcard/.bot/bot/temp';
-            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+        } catch (e) {
+          console.error(e);
 
-            const inputPath = path.join(tempDir, 'group_profile.webp');
-            const outputPath = path.join(tempDir, 'group_profile.jpg');
-            fs.writeFileSync(inputPath, buffer);
-
-            exec(`gm convert ${inputPath} ${outputPath}`, async (err) => {
-                if (err) {
-                    console.error('❌ خطأ في تحويل الصورة:', err);
-                    return sock.sendMessage(chatId, {
-                        text: '❌ فشل في تحويل الصورة، تأكد من تثبيت GraphicsMagick.'
-                    }, { quoted: msg });
-                }
-
-                await sock.updateProfilePicture(chatId, { url: outputPath }).catch(() => {});
-
-                fs.unlinkSync(inputPath);
-                fs.unlinkSync(outputPath);
-
-                await sock.sendMessage(chatId, {
-                    text: '✅ تم تغيير صورة المجموعة بنجاح.'
-                }, { quoted: msg });
-            });
-
-        } catch (error) {
-            console.error('❌ حدث خطأ أثناء تغيير صورة الجروب:', error);
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ حدث خطأ أثناء تغيير صورة المجموعة، حاول مرة أخرى لاحقاً.'
-            }, { quoted: msg });
+          await sock.sendMessage(chatId, {
+            text: '❌ فشل في تعيين صورة المجموعة.'
+          }, { quoted: msg });
         }
+      });
+
+    } catch (error) {
+      console.error('ICON ERROR:', error);
+
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: 'SYSTEM ERROR'
+      }, { quoted: msg });
     }
+  }
 };

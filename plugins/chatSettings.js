@@ -1,56 +1,80 @@
 const { isElite } = require('../haykala/elite.js');
 const { jidDecode } = require('@whiskeysockets/baileys');
 
-const decode = jid => (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp.net';
+const decode = jid =>
+  (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp.net';
 
 module.exports = {
-    command: 'شات',
-    description: 'إدارة إعدادات الجروب من فتح أو قفل.',
-    usage: '.شات [فتح|قفل]',
+  command: 'شات',
+  description: 'فتح أو قفل الشات في المجموعة',
+  usage: '.شات فتح | .شات قفل',
 
-    async execute(sock, msg) {
-        try {
-            const groupJid = msg.key.remoteJid;
-            const sender = decode(msg.key.participant || groupJid);
-            const senderLid = sender.split('@')[0];
+  async execute(sock, msg) {
+    try {
 
-            if (!groupJid.endsWith('@g.us')) {
-                return await sock.sendMessage(groupJid, {
-                    text: '❗ هذا الأمر يعمل فقط داخل المجموعات.'
-                }, { quoted: msg });
-            }
+      const groupJid = msg.key.remoteJid;
+      const sender = decode(msg.key.participant || groupJid);
+      const senderNum = sender.split('@')[0];
 
-            if (!isElite(senderLid)) {
-                return await sock.sendMessage(groupJid, {
-                    text: '❌ ليس لديك صلاحية لاستخدام هذا الأمر.'
-                }, { quoted: msg });
-            }
+      if (!groupJid.endsWith('@g.us')) {
+        return sock.sendMessage(groupJid, {
+          text: '❌ هذا الأمر للمجموعات فقط'
+        }, { quoted: msg });
+      }
 
-            const body = msg.message?.extendedTextMessage?.text ||
-                         msg.message?.conversation || '';
-            const lower = body.toLowerCase();
+      if (!isElite(senderNum)) {
+        return sock.sendMessage(groupJid, {
+          text: '❌ ليس لديك صلاحية'
+        }, { quoted: msg });
+      }
 
-            let option = null;
-            if (lower.includes('فتح')) option = 'فتح';
-            else if (lower.includes('قفل')) option = 'قفل';
+      const text =
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.conversation || '';
 
-            if (!option) {
-                return await sock.sendMessage(groupJid, {
-                    text: '❌ يرجى تحديد الخيار: .شات فتح أو .شات قفل'
-                }, { quoted: msg });
-            }
+      const args = text.trim().split(/\s+/);
+      const action = args[1];
 
-            if (option === 'فتح') {
-                await sock.groupSettingUpdate(groupJid, 'not_announcement');
-            } else if (option === 'قفل') {
-                await sock.groupSettingUpdate(groupJid, 'announcement');
-            }
+      if (!action) {
+        return sock.sendMessage(groupJid, {
+          text: '❌ الاستخدام:\n.شات فتح\n.شات قفل'
+        }, { quoted: msg });
+      }
 
-        } catch (error) {
-            console.error('✗ خطأ في أمر الشات:', error);
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ حدث خطأ أثناء تنفيذ الأمر:\n\n${error.message || error.toString()}`
-            }, { quoted: msg });
-        }
+      let statusText = '';
+
+      if (action === 'فتح') {
+
+        await sock.groupSettingUpdate(groupJid, 'not_announcement');
+        statusText = '🟢 CHAT OPENED';
+
+      } else if (action === 'قفل') {
+
+        await sock.groupSettingUpdate(groupJid, 'announcement');
+        statusText = '🔴 CHAT CLOSED';
+
+      } else {
+        return sock.sendMessage(groupJid, {
+          text: '❌ خيار غير معروف'
+        }, { quoted: msg });
+      }
+
+      // 💀 رد احترافي
+      return sock.sendMessage(groupJid, {
+        text: `╔══════════════╗
+║ WALTER-X SYS ║
+╠══════════════╣
+║ STATUS: ${statusText}
+║ BY: Dev ABOODI
+╚══════════════╝`
+      }, { quoted: msg });
+
+    } catch (err) {
+      console.error('CHAT ERROR:', err);
+
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: 'SYSTEM FAILURE'
+      }, { quoted: msg });
     }
+  }
 };

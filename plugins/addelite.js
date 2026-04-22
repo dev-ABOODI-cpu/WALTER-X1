@@ -1,90 +1,129 @@
 const {
-    eliteNumbers,
-    isElite,
-    addEliteNumber,
-    removeEliteNumber,
-    extractPureNumber
+  eliteNumbers,
+  isElite,
+  addEliteNumber,
+  removeEliteNumber,
+  extractPureNumber
 } = require('../haykala/elite');
 
 module.exports = {
-    command: 'نخبة',
-    description: 'إضافة أو إزالة رقم من قائمة النخبة أو عرضها (للنخبة فقط)',
-    usage: '.نخبة اضف/ازل/عرض + منشن أو رد أو رقم',
-    category: 'zarf',    
+  command: 'نخبة',
+  description: 'إدارة قائمة النخبة (WALTER-X)',
+  usage: '.نخبة اضف | ازل | عرض',
 
-    async execute(sock, msg) {
-        const senderJid = msg.key.participant || msg.participant || msg.key.remoteJid;
-        const senderNumber = extractPureNumber(senderJid);
+  async execute(sock, msg) {
+    try {
 
-        if (!isElite(senderNumber)) {
-            return sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ هذا الأمر مخصص للنخبة فقط.'
-            }, { quoted: msg });
+      const jid = msg.key.remoteJid;
+
+      const sender = extractPureNumber(
+        msg.key.participant || jid
+      );
+
+      // 🔐 صلاحية
+      if (!isElite(sender)) {
+        return sock.sendMessage(jid, {
+          text: '❌ SYSTEM LOCKED'
+        }, { quoted: msg });
+      }
+
+      const text =
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.conversation || '';
+
+      const args = text.trim().split(/\s+/);
+      const action = args[1];
+
+      // 📊 عرض القائمة
+      if (!action || action === 'عرض') {
+
+        const list = eliteNumbers.length
+          ? eliteNumbers.map((n, i) => `┃ ${i + 1}. ${n}`).join('\n')
+          : '┃ لا يوجد أعضاء';
+
+        return sock.sendMessage(jid, {
+          text: `╔══════════════╗
+║ ELITE SYSTEM ║
+╠══════════════╣
+${list}
+╚══════════════╝`
+        }, { quoted: msg });
+      }
+
+      // ❌ تحقق من العملية
+      if (!['اضف', 'ازل'].includes(action)) {
+        return sock.sendMessage(jid, {
+          text: '❌ الاستخدام: .نخبة اضف | ازل | عرض'
+        }, { quoted: msg });
+      }
+
+      // 🎯 تحديد الهدف
+      let target =
+        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
+        msg.message?.extendedTextMessage?.contextInfo?.participant ||
+        (args[2] ? args[2].replace(/[^0-9]/g, '') : null);
+
+      if (!target) {
+        return sock.sendMessage(jid, {
+          text: '❌ حدد شخص (منشن أو رد أو رقم)'
+        }, { quoted: msg });
+      }
+
+      const number = extractPureNumber(target);
+
+      // 🧠 حماية النظام
+      if (number === sender) {
+        return sock.sendMessage(jid, {
+          text: '❌ لا يمكنك تعديل نفسك'
+        }, { quoted: msg });
+      }
+
+      // ➕ إضافة
+      if (action === 'اضف') {
+
+        if (eliteNumbers.includes(number)) {
+          return sock.sendMessage(jid, {
+            text: `⚠️ ${number} موجود بالفعل`
+          }, { quoted: msg });
         }
 
-        const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-        const parts = text.trim().split(/\s+/);
-        const action = parts[1];
+        addEliteNumber(number);
 
-        if (!action || !['اضف', 'ازل', 'عرض'].includes(action)) {
-            return sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ استخدم: .نخبة اضف/ازل مع منشن أو رد أو رقم، أو .نخبة عرض.'
-            }, { quoted: msg });
+        return sock.sendMessage(jid, {
+          text: `╔══════════════╗
+║ ELITE ADDED  ║
+╠══════════════╣
+║ ${number}
+╚══════════════╝`
+        }, { quoted: msg });
+      }
+
+      // ➖ إزالة
+      if (action === 'ازل') {
+
+        if (!eliteNumbers.includes(number)) {
+          return sock.sendMessage(jid, {
+            text: `⚠️ غير موجود`
+          }, { quoted: msg });
         }
 
-        if (action === 'عرض') {
-            const list = eliteNumbers.map((n, i) => `${i + 1}. ${n}`).join('\n');
-            return sock.sendMessage(msg.key.remoteJid, {
-                text: `قائمة أرقام النخبة:\n\n${list || 'لا يوجد أرقام بعد.'}`
-            }, { quoted: msg });
-        }
+        removeEliteNumber(number);
 
-        let targetNumber;
+        return sock.sendMessage(jid, {
+          text: `╔══════════════╗
+║ ELITE REMOVED║
+╠══════════════╣
+║ ${number}
+╚══════════════╝`
+        }, { quoted: msg });
+      }
 
-        // رقم مباشر
-        if (parts[2] && /^\d{5,}$/.test(parts[2])) {
-            targetNumber = extractPureNumber(parts[2]);
-        }
+    } catch (err) {
+      console.error(err);
 
-        // أو من منشن / رد
-        if (!targetNumber) {
-            const targetJid =
-                msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
-                msg.message?.extendedTextMessage?.contextInfo?.participant;
-
-            if (!targetJid) {
-                return sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ يجب منشن أو الرد على الشخص المستهدف أو إدخال رقم صحيح.'
-                }, { quoted: msg });
-            }
-
-            targetNumber = extractPureNumber(targetJid);
-        }
-
-        if (action === 'اضف') {
-            if (eliteNumbers.includes(targetNumber)) {
-                return sock.sendMessage(msg.key.remoteJid, {
-                    text: `⚠️ الرقم ${targetNumber} موجود بالفعل في قائمة النخبة.`
-                }, { quoted: msg });
-            }
-
-            addEliteNumber(targetNumber);
-            return sock.sendMessage(msg.key.remoteJid, {
-                text: `✅ تم إضافة الرقم ${targetNumber} إلى النخبة.`
-            }, { quoted: msg });
-        }
-
-        if (action === 'ازل') {
-            if (!eliteNumbers.includes(targetNumber)) {
-                return sock.sendMessage(msg.key.remoteJid, {
-                    text: `⚠️ الرقم ${targetNumber} غير موجود في قائمة النخبة.`
-                }, { quoted: msg });
-            }
-
-            removeEliteNumber(targetNumber);
-            return sock.sendMessage(msg.key.remoteJid, {
-                text: `✅ تم إزالة الرقم ${targetNumber} من النخبة.`
-            }, { quoted: msg });
-        }
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: 'SYSTEM ERROR'
+      }, { quoted: msg });
     }
+  }
 };

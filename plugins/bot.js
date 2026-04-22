@@ -3,62 +3,83 @@ const { join } = require('path');
 const { eliteNumbers } = require('../haykala/elite.js');
 const { jidDecode } = require('@whiskeysockets/baileys');
 
-const decode = jid => (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp.net';
+const decode = jid =>
+  (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp.net';
 
 module.exports = {
-    command: 'bot',
-    description: 'تشغيل أو إيقاف البوت مؤقتًا',
-    usage: '.bot [on/off]',
-    category: 'tools',
+  command: 'bot',
+  description: 'تشغيل أو إيقاف نظام البوت',
+  usage: '.bot on | .bot off',
+  category: 'SYSTEM',
 
-    async execute(sock, msg) {
-        const jid = msg.key.remoteJid;
-        const sender = decode(msg.key.participant || jid);
-        const senderLid = sender.split('@')[0];
+  async execute(sock, msg) {
+    try {
 
+      const jid = msg.key.remoteJid;
+      const sender = decode(msg.key.participant || jid);
+      const senderNum = sender.split('@')[0];
 
-        if (!eliteNumbers.includes(senderLid)) {
-            return await sock.sendMessage(jid, {
-                text: '❗ لا تملك صلاحية استخدام هذا الأمر.'
-            }, { quoted: msg });
+      // 🔐 صلاحيات
+      if (!eliteNumbers.includes(senderNum)) {
+        return sock.sendMessage(jid, {
+          text: '❌ SYSTEM LOCKED'
+        }, { quoted: msg });
+      }
+
+      const text =
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.conversation || '';
+
+      const args = text.trim().split(/\s+/);
+      const action = args[1];
+
+      const botPath = join(__dirname, '../data', 'bot.txt');
+
+      // 📊 عرض الحالة
+      if (!action) {
+
+        let status = '[ON]';
+
+        if (fs.existsSync(botPath)) {
+          status = fs.readFileSync(botPath, 'utf8').trim();
         }
 
-        const args = msg.args || [];
-        const botPath = join(__dirname, '../data', 'bot.txt');
+        return sock.sendMessage(jid, {
+          text: `╔══════════════╗
+║ WALTER-X BOT ║
+╠══════════════╣
+║ STATUS: ${status}
+╚══════════════╝`
+        }, { quoted: msg });
+      }
 
+      if (!['on', 'off'].includes(action)) {
+        return sock.sendMessage(jid, {
+          text: '❌ USE: .bot on | .bot off'
+        }, { quoted: msg });
+      }
 
-        if (!args[0]) {
-            let current = '[on]';
-            try {
-                if (fs.existsSync(botPath)) {
-                    current = fs.readFileSync(botPath, 'utf8').trim();
-                }
-            } catch (err) {
-                console.error('فشل قراءة حالة البوت:', err.message);
-            }
+      // 💾 حفظ الحالة
+      fs.writeFileSync(botPath, `[${action.toUpperCase()}]`);
 
-            return await sock.sendMessage(jid, {
-                text: `حالة البوت الحالية: ${current}`
-            }, { quoted: msg });
-        }
+      const response =
+        action === 'on'
+          ? '🟢 SYSTEM ACTIVATED'
+          : '🔴 SYSTEM DEACTIVATED';
 
+      return sock.sendMessage(jid, {
+        text: `╔══════════════╗
+║ ${response}
+║ BY: Dev ABOODI
+╚══════════════╝`
+      }, { quoted: msg });
 
-        const action = args[0].toLowerCase();
-        if (!['on', 'off'].includes(action)) {
-            return await sock.sendMessage(jid, {
-                text: '❗ استخدم: .bot on أو .bot off'
-            }, { quoted: msg });
-        }
+    } catch (err) {
+      console.error('BOT CONTROL ERROR:', err);
 
-        try {
-            fs.writeFileSync(botPath, `[${action}]`);
-            await sock.sendMessage(jid, {
-                text: action === 'on' ? '✅ تم تشغيل البوت' : '⛔ تم إيقاف البوت'
-            }, { quoted: msg });
-        } catch (err) {
-            await sock.sendMessage(jid, {
-                text: 'حدث خطأ أثناء تحديث حالة البوت.'
-            }, { quoted: msg });
-        }
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: 'SYSTEM FAILURE'
+      }, { quoted: msg });
     }
+  }
 };

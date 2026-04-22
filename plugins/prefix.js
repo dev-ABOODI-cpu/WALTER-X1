@@ -1,87 +1,46 @@
 const fs = require('fs');
 const path = require('path');
-const config = require('../config.js');
-const { isElite } = require('../haykala/elite.js'); 
+const { isElite } = require('../haykala/elite.js');
 
-const configPath = path.join(__dirname, '../config.js');
+const prefixFile = path.join(__dirname, '../data/prefix.json');
 
 module.exports = {
   command: 'بريفكس',
-  description: 'تغيير البريفكس الخاص بالأوامر (النخبة فقط)',
-  usage: '.بريفكس [رمز جديد]',
-  category: 'tools',
+  category: 'SYSTEM',
+  description: 'تغيير البريفكس (آمن)',
 
   async execute(sock, msg) {
     const chatId = msg.key.remoteJid;
-    const senderJid = msg.key.participant || msg.key.remoteJid;
-    const sender = senderJid.split('@')[0];
+    const sender = msg.key.participant || msg.key.remoteJid;
+    const senderNum = sender.split('@')[0];
 
-    if (typeof isElite !== 'function' || !isElite(sender)) {
+    if (!isElite(senderNum)) {
       return sock.sendMessage(chatId, {
-        text: config.messages.ownerOnly
+        text: '❌ هذا الأمر للنخبة فقط'
       }, { quoted: msg });
     }
 
-    const fullText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-    const currentPrefix = config.prefix || config.defaultPrefix || '.';
-    const input = fullText.startsWith(currentPrefix)
-      ? fullText.slice((currentPrefix + 'بريفكس').length).trim()
-      : '';
+    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+    const args = text.trim().split(/\s+/);
 
-    if (!input) {
+    const newPrefix = args[1];
+
+    if (!newPrefix) {
+      const current = fs.existsSync(prefixFile)
+        ? fs.readFileSync(prefixFile, 'utf8')
+        : '.';
+
       return sock.sendMessage(chatId, {
-        text: '❌ الرجاء كتابة البريفكس الجديد.\nمثال: .بريفكس $ أو .بريفكس فارغ'
+        text: `📌 البريفكس الحالي: ${current}`
       }, { quoted: msg });
     }
 
-    const newPrefix = (input === 'فارغ') ? '' : input;
-    config.prefix = newPrefix;
+    const finalPrefix = newPrefix === 'فارغ' ? '' : newPrefix;
 
-    const updatedContent = `let prefix = '${newPrefix}';
+    fs.writeFileSync(prefixFile, finalPrefix);
 
-module.exports = {
-    botName: 'Anastasia',
-    version: '2.5.0',
-    owner: '972532731932',
-
-    defaultPrefix: '.',
-    get prefix() {
-        return prefix;
-    },
-    set prefix(newPrefix) {
-        if (newPrefix && typeof newPrefix === 'string') {
-            prefix = newPrefix;
-        }
-    },
-
-    allowedGroups: [],
-
-    messages: {
-        error: '❌ حدث خطأ أثناء تنفيذ الأمر',
-        noPermission: 'ليس لديك صلاحية لاستخدام هذا الأمر',
-        groupOnly: 'هذا الأمر متاح فقط في المجموعات',
-        ownerOnly: 'هذا الأمر متاح فقط للنخبة',
-        notAllowedGroup: 'عذراً، البوت لا يعمل في هذه المجموعة'
-    },
-
-    colors: {
-        success: '\\x1b[32m',
-        error: '\\x1b[31m',
-        info: '\\x1b[36m',
-        warn: '\\x1b[33m',
-        reset: '\\x1b[0m'
-    }
-};
-`;
-
-    fs.writeFileSync(configPath, updatedContent);
-
-    const display = newPrefix === '' ? 'فارغ' : `(${newPrefix})`;
-    let response = `✅ تم تغيير البريفكس إلى ${display}`;
-    if (newPrefix === '') {
-      response += `\n⚠️ يجب إعادة تشغيل البوت لتفعيل البريفكس الفارغ.`;
-    }
-
-    return sock.sendMessage(chatId, { text: response }, { quoted: msg });
+    return sock.sendMessage(chatId, {
+      text: `✅ تم تغيير البريفكس إلى: ${finalPrefix || 'فارغ'}`
+    }, { quoted: msg });
   }
 };

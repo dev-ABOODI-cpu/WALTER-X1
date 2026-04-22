@@ -1,68 +1,61 @@
-const fs = require('fs');
-const path = require('path');
-const { writeFile, mkdir } = require('fs/promises');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const { eliteNumbers } = require('../haykala/elite.js');
 
-// دالة التحقق من النخبة
+// التحقق من النخبة
 function isElite(sender) {
     return eliteNumbers.includes(sender.split('@')[0]);
 }
 
 module.exports = {
     command: 'topng',
-    async execute(sock, m) {
-        const sender = m.key.participant || m.participant || m.key.remoteJid;
+    description: 'تحويل الملصق إلى صورة',
 
-        // التحقق إذا المستخدم من النخبة
+    async execute(sock, m) {
+        const chatId = m.key.remoteJid;
+        const sender = m.key.participant || m.participant || chatId;
+
         if (!isElite(sender)) {
-            return sock.sendMessage(m.key.remoteJid, {
-                text: '🚫 هذا الأمر مخصص للأعضاء النخبة فقط!'
+            return sock.sendMessage(chatId, {
+                text: '🚫 هذا الأمر مخصص للنخبة فقط!'
             }, { quoted: m });
         }
 
         try {
-            const chatId = m.key.remoteJid;
+            const context = m.message?.extendedTextMessage?.contextInfo;
 
-            // استخراج الملصق من الرسالة أو الرسالة المقتبسة
-            const sticker = m.message?.stickerMessage || m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.stickerMessage;
+            const sticker =
+                m.message?.stickerMessage ||
+                context?.quotedMessage?.stickerMessage;
 
             if (!sticker) {
                 return sock.sendMessage(chatId, {
-                    text: '❌ أرسل هذا الأمر مع ملصق فقط!'
+                    text: '❌ أرسل أمرك مع ملصق أو قم بالرد على ملصق!'
                 }, { quoted: m });
             }
 
             // تحميل الملصق
             const stream = await downloadContentFromMessage(sticker, 'sticker');
+
             let buffer = Buffer.from([]);
             for await (const chunk of stream) {
                 buffer = Buffer.concat([buffer, chunk]);
             }
 
-            // إنشاء مجلد مؤقت إن لم يكن موجودًا
-            const tempDir = '/sdcard/.bot/bot/temp';
-            if (!fs.existsSync(tempDir)) {
-                await mkdir(tempDir, { recursive: true });
+            if (!buffer.length) {
+                return sock.sendMessage(chatId, {
+                    text: '❌ فشل تحميل الملصق!'
+                }, { quoted: m });
             }
 
-            // حفظ الصورة مؤقتًا
-            const filePath = path.join(tempDir, `sticker_${Date.now()}.jpg`);
-            await writeFile(filePath, buffer);
-
-            // إرسال الصورة
             await sock.sendMessage(chatId, {
                 image: buffer,
-                caption: "🖼️ تم تحويل الملصق إلى صورة."
+                caption: '🖼️ تم تحويل الملصق إلى صورة بنجاح.'
             }, { quoted: m });
 
-            // حذف الملف المؤقت
-            fs.unlinkSync(filePath);
-
         } catch (error) {
-            console.error("❌ خطأ أثناء تحويل الملصق إلى صورة:", error);
-            await sock.sendMessage(m.key.remoteJid, {
-                text: '❌ حدث خطأ أثناء التحويل، حاول مرة أخرى لاحقًا.'
+            console.error('❌ error:', error);
+            await sock.sendMessage(chatId, {
+                text: `❌ حدث خطأ:\n${error.message || error.toString()}`
             }, { quoted: m });
         }
     }

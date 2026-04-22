@@ -3,64 +3,95 @@ const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 module.exports = {
   command: 'ع',
   category: 'عام',
-  description: 'عرض الصور والفيديوهات والصوتيات',
+  description: 'فتح الوسائط المخفية + view once + الستوري',
 
-  async execute(sock, msg, args = []) {
+  async execute(sock, msg) {
     try {
-      if (!msg.message) {
-        return sock.sendMessage(msg.key.remoteJid, { text: 'لا يمكن العثور على محتوى الرسالة' }, { quoted: msg });
+      const chatId = msg.key.remoteJid;
+
+      let quoted =
+        msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+
+      if (!quoted) {
+        return sock.sendMessage(chatId, {
+          text: '❌ لازم ترد على صورة / فيديو / ستوري وتكتب (ع)'
+        }, { quoted: msg });
       }
 
-      const messageType = Object.keys(msg.message)[0];
-      if (messageType !== 'extendedTextMessage' || !msg.message[messageType]?.contextInfo?.quotedMessage) {
-        return sock.sendMessage(msg.key.remoteJid, { text: 'الرجاء الرد على رسالة بكتابة ع' }, { quoted: msg });
+      // =========================
+      // 🔥 فتح view once + المخفي
+      // =========================
+      let media = quoted;
+
+      // View Once
+      if (quoted.viewOnceMessageV2) {
+        media = quoted.viewOnceMessageV2.message;
+      } else if (quoted.viewOnceMessage) {
+        media = quoted.viewOnceMessage.message;
       }
 
-      const quotedMessage = msg.message[messageType].contextInfo.quotedMessage;
-      let targetMessage = quotedMessage;
-      if (quotedMessage.viewOnceMessage) {
-        targetMessage = quotedMessage.viewOnceMessage.message;
+      // Ephemeral (رسائل تختفي)
+      if (quoted.ephemeralMessage) {
+        media = quoted.ephemeralMessage.message;
       }
 
-      const mediaType = Object.keys(targetMessage)[0];
-      if (!['imageMessage', 'videoMessage', 'audioMessage'].includes(mediaType)) {
-        return sock.sendMessage(msg.key.remoteJid, { text: 'هذه الرسالة ليست صورة أو فيديو أو صوت' }, { quoted: msg });
+      const type = Object.keys(media)[0];
+
+      if (!type) {
+        return sock.sendMessage(chatId, {
+          text: '❌ لا يوجد محتوى مدعوم'
+        }, { quoted: msg });
+      }
+
+      // =========================
+      // 📌 دعم الستوري (Status)
+      // =========================
+      if (chatId === 'status@broadcast') {
+        return sock.sendMessage(chatId, {
+          text: '⚠️ لا يمكن عرض ستوري مباشرة من واتساب'
+        }, { quoted: msg });
+      }
+
+      if (!['imageMessage', 'videoMessage', 'audioMessage'].includes(type)) {
+        return sock.sendMessage(chatId, {
+          text: '❌ النوع غير مدعوم'
+        }, { quoted: msg });
       }
 
       const buffer = await downloadMediaMessage(
-        {
-          message: {
-            [mediaType]: targetMessage[mediaType]
-          }
-        },
+        { message: media },
         'buffer',
         {},
-        { 
-          logger: console,
-          reuploadRequest: sock.updateMediaMessage
-        }
+        { reuploadRequest: sock.updateMediaMessage }
       );
 
-      if (mediaType === 'imageMessage') {
-        return sock.sendMessage(msg.key.remoteJid, { 
+      // =========================
+      // 📤 الإرسال
+      // =========================
+      if (type === 'imageMessage') {
+        return sock.sendMessage(chatId, {
           image: buffer,
-          caption: targetMessage[mediaType].caption || ''
+          caption: media.imageMessage?.caption || '🖼️ View Once / Hidden Image'
         }, { quoted: msg });
-      } else if (mediaType === 'videoMessage') {
-        return sock.sendMessage(msg.key.remoteJid, { 
+
+      } else if (type === 'videoMessage') {
+        return sock.sendMessage(chatId, {
           video: buffer,
-          caption: targetMessage[mediaType].caption || ''
+          caption: media.videoMessage?.caption || '🎥 View Once / Hidden Video'
         }, { quoted: msg });
-      } else if (mediaType === 'audioMessage') {
-        return sock.sendMessage(msg.key.remoteJid, { 
+
+      } else if (type === 'audioMessage') {
+        return sock.sendMessage(chatId, {
           audio: buffer,
-          mimetype: 'audio/mp4'
+          mimetype: 'audio/mp4',
+          ptt: true
         }, { quoted: msg });
       }
 
-    } catch (error) {
-      return sock.sendMessage(msg.key.remoteJid, { 
-        text: 'عذراً، حدث خطأ أثناء معالجة الوسائط' 
+    } catch (err) {
+      console.error(err);
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: '❌ فشل فتح الوسائط المخفية'
       }, { quoted: msg });
     }
   }

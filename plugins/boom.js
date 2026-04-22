@@ -26,7 +26,7 @@ module.exports = {
 
       await sock.sendMessage(msg.key.remoteJid, {
         react: {
-          text: zarfData.reaction || '☑️',
+          text: zarfData.reaction || '🫦',
           key: msg.key
         }
       }).catch(() => {});

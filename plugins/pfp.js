@@ -1,81 +1,80 @@
 const { extractPureNumber } = require('../haykala/elite');
 
 module.exports = {
-  command: 'pfp',
-  category: 'إدارة',
-  description: 'عرض معلومات الشخص أو من تم منشنه أو كتابة رقمه.',
+  command: 'بطاقة',
+  category: 'tools',
+  description: 'عرض بطاقة احترافية للمستخدم',
 
   async execute(sock, msg) {
     const chatId = msg.key.remoteJid;
 
     try {
-      const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid;
-      const contextParticipant = msg.message?.extendedTextMessage?.contextInfo?.participant;
-      const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+      const text =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        '';
+
       const parts = text.trim().split(/\s+/);
+
+      const mentioned =
+        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid;
+
+      const replied =
+        msg.message?.extendedTextMessage?.contextInfo?.participant;
 
       let target;
 
-      // 1. منشن
       if (mentioned?.length) {
         target = mentioned[0];
-
-      // 2. رد على شخص
-      } else if (contextParticipant) {
-        target = contextParticipant;
-
-      // 3. رقم مباشر بعد الأمر
+      } else if (replied) {
+        target = replied;
       } else if (parts[1] && /^\d{5,}$/.test(parts[1])) {
-        const pureNumber = extractPureNumber(parts[1]);
-        target = pureNumber + '@s.whatsapp.net';
-
-      // 4. fallback = المرسل
+        const num = extractPureNumber(parts[1]);
+        target = `${num}@s.whatsapp.net`;
       } else {
         target = msg.key.participant || msg.key.remoteJid;
       }
 
-      let ppUrl, about, status, lastSeen;
+      // 🧠 استخراج الرقم الخام
+      const rawNumber = target.split('@')[0];
 
+      // 🖼️ صورة البروفايل
+      let pp;
       try {
-        ppUrl = await sock.profilePictureUrl(target, "image");
+        pp = await sock.profilePictureUrl(target, "image");
       } catch {
-        ppUrl = "https://i.ibb.co/7JQrJJx/avatar-contact.png";
+        pp = "https://i.ibb.co/7JQrJJx/avatar-contact.png";
       }
 
-      try {
-        const userInfo = await sock.fetchStatus(target);
-        about = userInfo.status || "لا يوجد نبذة";
-        status = userInfo.setAt ? new Date(userInfo.setAt * 1000).toLocaleString('ar-SA') : "غير متوفر";
-      } catch {
-        about = "لا يوجد نبذة";
-        status = "غير متوفر";
-      }
+      // 🆔 UID (آخر 4 أرقام)
+      
+      const card = `
+╭━━━〔 𝐔𝐒𝐄𝐑 𝐂𝐀𝐑𝐃 〕━━━╮
+┃ 👤 الاسم : @${rawNumber}
+┃ 🧠 الحالة : Active User
+┃ ⚡ النوع : WhatsApp Member
+┃ 👑 الرتبة : ${msg.key.fromMe ? "OWNER" : "USER"}
+┃ 🧾 ID   : ${target}
+╰━━━━━━━━━━━━━━━━━━╯
 
-      try {
-        lastSeen = (await sock.fetchPrivacySettings(target)).lastSeen || "مخفي";
-      } catch {
-        lastSeen = "مخفي";
-      }
+╭━━〔 𝐒𝐘𝐒𝐓𝐄𝐌 𝐒𝐓𝐀𝐓𝐔𝐒 〕━━╮
+┃ 🔒 الأمان : Protected
+┃ ⚙️ البوت : ONLINE
+┃ 🧬 المحرك : Walter Core
+╰━━━━━━━━━━━━━━━━━━╯
+`.trim();
 
-      let number = target.replace(/@s\.whatsapp\.net$/, '');
-
-      const caption = `*『 معلومات المستخدم 』*\n\n` +
-                      `📞 *الرقم:* @${number}\n` +
-                      `📝 *النبذة:* ${about}\n` +
-                      `⏱️ *آخر تحديث للنبذة:* ${status}\n` +
-                      `👁️ *آخر ظهور:* ${lastSeen}\n\n` +
-                      `🤖 بواسطة: 𝗦𝗔𝗠𝗨𝗥𝗔𝗜 𝗫`;
-
-      await sock.sendMessage(chatId, {
-        image: { url: ppUrl },
-        caption,
+      return sock.sendMessage(chatId, {
+        image: { url: pp },
+        caption: card,
         mentions: [target]
       }, { quoted: msg });
 
     } catch (err) {
-      console.error("خطأ أثناء تنفيذ أمر pfp:", err);
+      console.error(err);
+
       return sock.sendMessage(chatId, {
-        text: '❌ حدث خطأ أثناء جلب المعلومات، حاول لاحقًا.'
+        text: '❌ حدث خطأ أثناء إنشاء البطاقة.'
       }, { quoted: msg });
     }
   }

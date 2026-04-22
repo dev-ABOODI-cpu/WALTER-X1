@@ -8,65 +8,87 @@ const decode = jid => (jidDecode(jid)?.user || jid.split('@')[0]) + '@s.whatsapp
 const warnings = {};
 const activeGroups = new Set();
 
+// 📁 بيانات الكلمات الممنوعة
 const dataDir = path.join(__dirname, '..', 'data');
 const filePath = path.join(dataDir, 'bannedWords.json');
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, JSON.stringify([]), 'utf8');
 
+// 🔥 تحميل الكلمات مرة واحدة فقط (تحسين الأداء)
+let bannedWords = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+
+fs.watchFile(filePath, () => {
+  try {
+    bannedWords = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    console.log('🔄 تم تحديث قائمة الكلمات الممنوعة');
+  } catch (e) {
+    console.error('خطأ في تحديث الكلمات:', e.message);
+  }
+});
+
 module.exports = {
   command: 'ربيهم',
-  description: 'يقوم بحذف الرسائل التي تحتوي على كلمات محظورة (بإذن النخبة).',
+  description: 'حذف الرسائل + طرد بعد 3 تحذيرات',
 
   async execute(sock, msg) {
-    try {
-      const groupJid = msg.key.remoteJid;
-      const sender = decode(msg.key.participant || groupJid);
-      const senderLid = sender.split('@')[0];
+    const groupJid = msg.key.remoteJid;
+    const sender = decode(msg.key.participant || groupJid);
+    const senderLid = sender.split('@')[0];
 
-      if (!groupJid.endsWith('@g.us')) {
-        return await sock.sendMessage(groupJid, {
-          text: '❗ هذا الأمر يعمل فقط داخل المجموعات.'
-        }, { quoted: msg });
-      }
+    if (!groupJid.endsWith('@g.us')) {
+      return sock.sendMessage(groupJid, {
+        text: '❗ هذا الأمر يعمل فقط داخل المجموعات.'
+      }, { quoted: msg });
+    }
 
-      if (!isElite(senderLid)) {
-        return await sock.sendMessage(groupJid, {
-          text: '❌ ليس لديك صلاحية لاستخدام هذا الأمر.'
-        }, { quoted: msg });
-      }
+    if (!isElite(senderLid)) {
+      return sock.sendMessage(groupJid, {
+        text: '❌ ليس لديك صلاحية لاستخدام هذا الأمر.'
+      }, { quoted: msg });
+    }
 
-      if (activeGroups.has(groupJid)) {
-        return await sock.sendMessage(groupJid, {
-          text: "✅ المراقبة مفعّلة بالفعل في هذه المجموعة."
-        }, { quoted: msg });
-      }
+    if (activeGroups.has(groupJid)) {
+      return sock.sendMessage(groupJid, {
+        text: "✅ المراقبة مفعّلة بالفعل."
+      }, { quoted: msg });
+    }
 
-      activeGroups.add(groupJid);
-      await sock.sendMessage(groupJid, { text: '👁️‍🗨️ اناستازيا ستربيهم.' });
+    activeGroups.add(groupJid);
 
+    await sock.sendMessage(groupJid, {
+      text: '👁️‍🗨️ تم تفعيل نظام "ربيهم" بنجاح.'
+    });
+
+    // 🚨 تسجيل الحدث مرة واحدة فقط
+    if (!sock._bannedListenerAdded) {
       sock.ev.on('messages.upsert', async ({ messages }) => {
-        for (const msg of messages) {
-          if (!msg.message || msg.key.fromMe) continue;
+        for (const m of messages) {
+          if (!m.message || m.key.fromMe) continue;
 
-          const currentChat = msg.key.remoteJid;
-          const sender = msg.key.participant || currentChat;
+          const chat = m.key.remoteJid;
+          if (!activeGroups.has(chat)) continue;
 
-          if (!activeGroups.has(currentChat)) continue;
+          const sender = m.key.participant || chat;
 
           const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
+            m.message.conversation ||
+            m.message.extendedTextMessage?.text ||
             '';
 
-          const bannedWords = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-          if (bannedWords.some(word => text.includes(word))) {
+          const cleanText = text.toLowerCase();
+
+          const found = bannedWords.find(w =>
+            cleanText.includes(w.toLowerCase())
+          );
+
+          if (found) {
             try {
-              await sock.sendMessage(currentChat, {
+              await sock.sendMessage(chat, {
                 delete: {
-                  remoteJid: currentChat,
+                  remoteJid: chat,
                   fromMe: false,
-                  id: msg.key.id,
+                  id: m.key.id,
                   participant: sender
                 }
               });
@@ -74,28 +96,26 @@ module.exports = {
               warnings[sender] = (warnings[sender] || 0) + 1;
 
               if (warnings[sender] < 3) {
-                await sock.sendMessage(currentChat, {
-                  text: `⚠️ تحذير ${warnings[sender]}/3 🚨`
+                await sock.sendMessage(chat, {
+                  text: `⚠️ تحذير ${warnings[sender]}/3`
                 });
               } else {
-                await sock.groupParticipantsUpdate(currentChat, [sender], 'remove');
-                await sock.sendMessage(currentChat, {
-                  text: '🗑️ تم التخلص من نفايات المجموعة بنجاح!.'
+                await sock.groupParticipantsUpdate(chat, [sender], 'remove');
+                await sock.sendMessage(chat, {
+                  text: '🚫 تم طرد العضو بسبب تكرار المخالفات.'
                 });
+
                 delete warnings[sender];
               }
+
             } catch (err) {
-              console.error("خطأ أثناء الحذف أو الطرد:", err);
+              console.error('خطأ في الحذف:', err.message);
             }
           }
         }
       });
 
-    } catch (error) {
-      console.error('✗ خطأ في أمر ربيهم:', error);
-      await sock.sendMessage(msg.key.remoteJid, {
-        text: `❌ حدث خطأ أثناء تنفيذ الأمر:\n\n${error.message || error.toString()}`
-      }, { quoted: msg });
+      sock._bannedListenerAdded = true;
     }
   }
 };

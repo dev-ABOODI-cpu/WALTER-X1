@@ -2,58 +2,70 @@ const fs = require('fs');
 const path = require('path');
 const { isElite } = require('../haykala/elite.js');
 
-// تحديد مسار المجلد والملف
+// 📁 المسار
 const dataDir = path.join(__dirname, '..', 'data');
 const filePath = path.join(dataDir, 'bannedWords.json');
 
-// إنشاء المجلد والملف تلقائيًا إن لم يكونا موجودين
+// إنشاء الملفات لو مش موجودة
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, JSON.stringify([]));
 
 module.exports = {
   command: "حظر",
-  description: "يضيف كلمة إلى قائمة الكلمات المحظورة.",
-  usage: ".حظر [الكلمة]",
-
+  description: "إضافة كلمة إلى قائمة الحظر",
+  usage: ".حظر [كلمة]",
+  category: 'CONTROL',
   async execute(sock, msg) {
     try {
-      const chatId = msg.key.remoteJid;
-      const sender = msg.key.participant || chatId;
 
-      if (!(await isElite(sender))) {
-        return await sock.sendMessage(chatId, {
-          text: "❌ هذا الأمر مخصص للنخبة فقط!"
+      const jid = msg.key.remoteJid;
+      const sender = msg.key.participant || jid;
+
+      // 🔐 صلاحية
+      if (!isElite(sender)) {
+        return sock.sendMessage(jid, {
+          text: '❌ SYSTEM LOCKED'
         }, { quoted: msg });
       }
 
-      const body = msg.message?.extendedTextMessage?.text || msg.message?.conversation || '';
-      const wordToBan = body.replace('.حظر', '').trim();
+      const text =
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.conversation || '';
 
-      if (!wordToBan) {
-        return await sock.sendMessage(chatId, {
-          text: "❌ يجب أن تكتب الكلمة التي تريد حظرها!"
+      const word = text.replace('.حظر', '').trim().toLowerCase();
+
+      if (!word) {
+        return sock.sendMessage(jid, {
+          text: '❌ اكتب الكلمة المراد حظرها'
         }, { quoted: msg });
       }
 
-      let bannedWords = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      let banned = JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
-      if (bannedWords.includes(wordToBan)) {
-        return await sock.sendMessage(chatId, {
-          text: `⚠️ الكلمة "${wordToBan}" محظورة بالفعل!`
+      // 🧠 منع التكرار
+      if (banned.includes(word)) {
+        return sock.sendMessage(jid, {
+          text: `⚠️ "${word}" موجودة بالفعل`
         }, { quoted: msg });
       }
 
-      bannedWords.push(wordToBan);
-      fs.writeFileSync(filePath, JSON.stringify(bannedWords, null, 2), 'utf8');
+      banned.push(word);
 
-      await sock.sendMessage(chatId, {
-        text: `✅ تمت إضافة "${wordToBan}" إلى قائمة الكلمات المحظورة.`
+      fs.writeFileSync(filePath, JSON.stringify(banned, null, 2));
+
+      return sock.sendMessage(jid, {
+        text: `╔══════════════╗
+║ WORD BANNED  ║
+╠══════════════╣
+║ ${word}
+╚══════════════╝`
       }, { quoted: msg });
 
-    } catch (error) {
-      console.error('✗ خطأ في أمر الحظر:', error);
-      await sock.sendMessage(msg.key.remoteJid, {
-        text: `❌ حدث خطأ أثناء تنفيذ الأمر:\n\n${error.message || error.toString()}`
+    } catch (err) {
+      console.error(err);
+
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: 'SYSTEM ERROR'
       }, { quoted: msg });
     }
   }

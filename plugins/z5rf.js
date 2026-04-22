@@ -1,43 +1,84 @@
 module.exports = {
-  command: "زخرف",
-  description: "يزخرف النصوص بأشكال جميلة.",
-  usage: ".زخرف [النص]",
-  
+  command: 'زخرف',
+  description: 'يزخرف النص بأشكال جميلة (عربي + إنجليزي)',
+  usage: '.زخرف [النص]',
+
   async execute(sock, msg) {
     try {
       const chatId = msg.key.remoteJid;
-      const sender = msg.key.participant || chatId;
-      
-      const body = msg.message?.extendedTextMessage?.text || msg.message?.conversation || '';
-      const text = body.replace('.زخرف', '').trim().toLowerCase();
+
+      const body =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        '';
+
+      const text = body.replace('.زخرف', '').trim();
 
       if (!text) {
-        return await sock.sendMessage(chatId, {
-          text: "❌ استخدم الأمر هكذا:\n*زخرف [النص]*\n📌 النص يجب أن يكون بحروف إنجليزية صغيرة فقط."
+        return sock.sendMessage(chatId, {
+          text: `❌ اكتب النص بعد الأمر\nمثال: .زخرف hello او مرحبا`
         }, { quoted: msg });
       }
 
-      const styles = [
-        { 'a': '𝒶', 'b': '𝒷', 'c': '𝒸', 'd': '𝒹', 'e': '𝑒', 'f': '𝒻', 'g': '𝒼', 'h': '𝒽', 'i': '𝒾', 'j': '𝒿', 'k': '𝓀', 'l': '𝓁', 'm': '𝓂', 'n': '𝓃', 'o': '𝑜', 'p': '𝓅', 'q': '𝓆', 'r': '𝓇', 's': '𝓈', 't': '𝓉', 'u': '𝓊', 'v': '𝓋', 'w': '𝓌', 'x': '𝓍', 'y': '𝓎', 'z': '𝓏' },
-        { 'a': '𝘢', 'b': '𝘣', 'c': '𝘤', 'd': '𝘥', 'e': '𝘦', 'f': '𝘧', 'g': '𝘨', 'h': '𝘩', 'i': '𝘪', 'j': '𝘫', 'k': '𝘬', 'l': '𝘭', 'm': '𝘮', 'n': '𝘯', 'o': '𝘰', 'p': '𝘱', 'q': '𝘲', 'r': '𝘳', 's': '𝘴', 't': '𝘵', 'u': '𝘶', 'v': '𝘷', 'w': '𝘸', 'x': '𝘹', 'y': '𝘺', 'z': '𝘻' },
-        { 'a': '𝕒', 'b': '𝕓', 'c': '𝕔', 'd': '𝕕', 'e': '𝕖', 'f': '𝕗', 'g': '𝕘', 'h': '𝕙', 'i': '𝕚', 'j': '𝕛', 'k': '𝕜', 'l': '𝕝', 'm': '𝕞', 'n': '𝕟', 'o': '𝕠', 'p': '𝕡', 'q': '𝕢', 'r': '𝕣', 's': '𝕤', 't': '𝕥', 'u': '𝕦', 'v': '𝕧', 'w': '𝕨', 'x': '𝕩', 'y': '𝕪', 'z': '𝕫' },
-        { 'a': '𝖆', 'b': '𝖇', 'c': '𝖈', 'd': '𝖉', 'e': '𝖊', 'f': '𝖋', 'g': '𝖌', 'h': '𝖍', 'i': '𝖎', 'j': '𝖏', 'k': '𝖐', 'l': '𝖑', 'm': '𝖒', 'n': '𝖓', 'o': '𝖔', 'p': '𝖕', 'q': '𝖖', 'r': '𝖗', 's': '𝖘', 't': '𝖙', 'u': '𝖚', 'v': '𝖛', 'w': '𝖜', 'x': '𝖝', 'y': '𝖞', 'z': '𝖟' },
-        { 'a': '𝙖', 'b': '𝙗', 'c': '𝙘', 'd': '𝙙', 'e': '𝙚', 'f': '𝙛', 'g': '𝙜', 'h': '𝙝', 'i': '𝙞', 'j': '𝙟', 'k': '𝙠', 'l': '𝙡', 'm': '𝙢', 'n': '𝙣', 'o': '𝙤', 'p': '𝙥', 'q': '𝙦', 'r': '𝙧', 's': '𝙨', 't': '𝙩', 'u': '𝙪', 'v': '𝙫', 'w': '𝙬', 'x': '𝙭', 'y': '𝙮', 'z': '𝙯' },
-        { 'a': '𝐀', 'b': '𝐁', 'c': '𝐂', 'd': '𝐃', 'e': '𝐄', 'f': '𝐅', 'g': '𝐆', 'h': '𝐇', 'i': '𝐈', 'j': '𝐉', 'k': '𝐊', 'l': '𝐋', 'm': '𝐌', 'n': '𝐍', 'o': '𝐎', 'p': '𝐏', 'q': '𝐐', 'r': '𝐑', 's': '𝐒', 't': '𝐓', 'u': '𝐔', 'v': '𝐕', 'w': '𝐖', 'x': '𝐗', 'y': '𝐘', 'z': '𝐙' },
-        { 'a': '𝑨', 'b': '𝑩', 'c': '𝑪', 'd': '𝑫', 'e': '𝑬', 'f': '𝑭', 'g': '𝑮', 'h': '𝑯', 'i': '𝑰', 'j': '𝑱', 'k': '𝑲', 'l': '𝑳', 'm': '𝑴', 'n': '𝑵', 'o': '𝑶', 'p': '𝑷', 'q': '𝑸', 'r': '𝑹', 's': '𝑺', 't': '𝑻', 'u': '𝑼', 'v': '𝑽', 'w': '𝑾', 'x': '𝑿', 'y': '𝒀', 'z': '𝒁' }
-      ];
+      // English styles
+      const bold = {
+        a:'𝐚',b:'𝐛',c:'𝐜',d:'𝐝',e:'𝐞',f:'𝐟',g:'𝐠',h:'𝐡',i:'𝐢',
+        j:'𝐣',k:'𝐤',l:'𝐥',m:'𝐦',n:'𝐧',o:'𝐨',p:'𝐩',q:'𝐪',r:'𝐫',
+        s:'𝐬',t:'𝐭',u:'𝐮',v:'𝐯',w:'𝐰',x:'𝐱',y:'𝐲',z:'𝐳'
+      };
 
-      let results = styles.map(style =>
-        text.split('').map(char => style[char] || char).join('')
-      ).join('\n');
+      const fancy = {
+        a:'𝒶',b:'𝒷',c:'𝒸',d:'𝒹',e:'𝑒',f:'𝒻',g:'𝒼',h:'𝒽',i:'𝒾',
+        j:'𝒿',k:'𝓀',l:'𝓁',m:'𝓂',n:'𝓃',o:'𝑜',p:'𝓅',q:'𝓆',r:'𝓇',
+        s:'𝓈',t:'𝓉',u:'𝓊',v:'𝓋',w:'𝓌',x:'𝓍',y:'𝓎',z:'𝓏'
+      };
+
+      const mono = {
+        a:'𝚊',b:'𝚋',c:'𝚌',d:'𝚍',e:'𝚎',f:'𝚏',g:'𝚐',h:'𝚑',i:'𝚒',
+        j:'𝚓',k:'𝚔',l:'𝚕',m:'𝚖',n:'𝚗',o:'𝚘',p:'𝚙',q:'𝚚',r:'𝚛',
+        s:'𝚜',t:'𝚝',u:'𝚞',v:'𝚟',w:'𝚠',x:'𝚡',y:'𝚢',z:'𝚣'
+      };
+
+      // Arabic simple beautifier
+      const arabicStyle = (t) => {
+        const map = {
+          "ا":"آ","ب":"بّ","ت":"تّ","ث":"ثّ","ج":"جّ","ح":"حّ",
+          "خ":"خّ","د":"دّ","ر":"رّ","س":"سّ","ص":"صّ","ط":"طّ",
+          "ع":"عّ","غ":"غّ","ف":"فّ","ق":"قّ","ك":"كّ","ل":"لّ",
+          "م":"مّ","ن":"نّ","ه":"هّ","و":"وّ","ي":"يّ"
+        };
+        return t.split('').map(c => map[c] || c).join('');
+      };
+
+      const lower = text.toLowerCase();
+
+      const make = (style) =>
+        lower.split('').map(c => style[c] || c).join('');
+
+      const result =
+`✨ زخرفة النص ✨
+
+🔹 Bold:
+${make(bold)}
+
+🔹 Fancy:
+${make(fancy)}
+
+🔹 Mono:
+${make(mono)}
+
+🔹 Arabic:
+${arabicStyle(text)}
+`;
 
       await sock.sendMessage(chatId, {
-        text: `✨ *زخرفة النص:* ✨\n${results}`
+        text: result
       }, { quoted: msg });
-    } catch (error) {
-      console.error('✗ خطأ في أمر الزخرفة:', error);
+
+    } catch (err) {
+      console.error(err);
       await sock.sendMessage(msg.key.remoteJid, {
-        text: `❌ حدث خطأ أثناء تنفيذ الأمر:\n\n${error.message || error.toString()}`
+        text: '❌ حدث خطأ أثناء الزخرفة'
       }, { quoted: msg });
     }
   }
