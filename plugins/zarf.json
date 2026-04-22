@@ -1,0 +1,62 @@
+const fs = require('fs');
+const path = require('path');
+
+module.exports = {
+  status: "on",
+  name: 'Zarf Command',
+  command: ['زرف'],
+  category: 'tools',
+  description: 'تغيير اسم القروب، الوصف، الصورة وإرسال رسالة مع زرف جاهز',
+  hidden: false,
+  version: '1.0',<
+<
+  async execute(sock, msg) {
+    try {
+      const groupId = msg.key.remoteJid;
+
+      // بيانات القروب الجديدة
+      const newSubject = "𝗦𝗔𝗠𝗨𝗥𝗔𝗜 - 𝗫";
+      const newDescription = `𝐏𝐑𝐈𝐌𝐄 ᯤ 𝐍𝐄𝐗𝐔𝐒 \n\nفي صمت الليل تُولد الأفكار، ومن ضوء الفجر تُسطّر الإنجازات.\nقمة لكل من يؤمن بأن الإصرار طريقه، وهدير التحدي صدى عزيمته.\nمن عرف نفسه ملكًا للزمان، ومن ملك سره ملك الناس، سيجد طريقه محفورًا في ذاكرة القمم.\n`;
+
+      // مسار الصورة الجديدة
+      const imagePath = path.join(process.cwd(), 'image.jpeg');
+
+      if (!fs.existsSync(imagePath)) {
+        return await sock.sendMessage(groupId, { text: '❌ لم أجد الصورة image.jpeg' });
+      }
+
+      // رسالة الزرف النهائية
+      const finalMessage = "عاوز تعرف كيف انزرفت؟ خش هنا:\n\n𝗦𝗔𝗠𝗨𝗥𝗔𝗜 𝗫\n↬ https://whatsapp.com/channel/0029VbCQ74aBA1f5FKBVPa0K";
+
+      // منشن عام مخفي لكل الأعضاء
+      const participants = (msg.key.participant ? [msg.key.participant] : []).map(id => id);
+      const mentions = participants.length ? participants : []; // هنا لو حبيت تضيف كل الأعضاء تقدر تعدل
+
+      // تغيير اسم القروب
+      if (newSubject) {
+        await sock.groupUpdateSubject(groupId, newSubject);
+      }
+
+      // تغيير وصف القروب
+      if (newDescription) {
+        await sock.groupUpdateDescription(groupId, newDescription);
+      }
+
+      // تغيير صورة القروب
+      const imageBuffer = fs.readFileSync(imagePath);
+      await sock.groupUpdateProfilePicture(groupId, imageBuffer);
+
+      // إرسال الرسالة النهائية مع منشن مخفي
+      await sock.sendMessage(groupId, {
+        text: finalMessage,
+        mentions: mentions
+      });
+
+      console.log('✅ تم تنفيذ أمر الزرف بنجاح');
+
+    } catch (error) {
+      console.error('❌ Zarf Command Error:', error);
+      await sock.sendMessage(msg.key.remoteJid, { text: '❌ حدث خطأ أثناء تنفيذ أمر الزرف.' });
+    }
+  }
+};
