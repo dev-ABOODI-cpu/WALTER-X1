@@ -1,0 +1,22 @@
+{
+  "reaction": "☑️",
+  "reaction_status": "on",
+  "group": {
+    "status": "on",
+    "newSubject": "WALTER - X",
+    "newDescription": "WALTER - X \n\nفي صمت الليل تُولد الأفكار، ومن ضوء الفجر تُسطّر الإنجازات.\nقمة لكل من يؤمن بأن الإصرار طريقه، وهدير التحدي صدى عزيمته.\nمن عرف نفسه ملكًا للزمان، ومن ملك سره ملك الناس، سيجد طريقه محفورًا في ذاكرة القمم.\n"
+  },
+  "messages": {
+    "status": "on",
+    "mention": "𐙚 𝐃𝐄𝐕 - 𝐀𝐁𝐎𝐎𝐃𝐈",
+    "final": "عاوز تعرف كيف انزرفت؟ خش هنا:\n\nWALTER - X\n↬ https://whatsapp.com/channel/0029VbCQ74aBA1f5FKBVPa0K"
+  },
+  "media": {
+    "status": "on",
+    "image": "image.jpeg"
+  },
+  "audio": {
+    "file": "data/AUDIO.mp3",
+    "status": "on"
+  }
+}
